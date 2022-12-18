@@ -1,8 +1,9 @@
-// Client-Server winApi.cpp : Defines the entry point for the application.
+﻿// Client.cpp : Defines the entry point for the application.
 //
+
 #define _CRT_SECURE_NO_WARNINGS
 #include "framework.h"
-#include "Client-Server winApi.h"
+#include "Client.h"
 #include <iostream>
 #include <string>
 #include "WinSock2.h" 
@@ -10,17 +11,17 @@
 
 #pragma comment(lib, "Ws2_32.lib") 
 
+
 const int MAXSTRLEN = 255;
 using namespace std;
 
 WSADATA wsaData;
-SOCKET _socket;
+SOCKET _socket; 
 SOCKET acceptSocket;
-sockaddr_in addr;
+sockaddr_in addr; 
 
-HWND hEditReceivedMessage, hEditSentMessage;
+HWND hEditReceivedMessage, hEditSentMessage, hEditIp;
 HWND hButtonStop, hButtonSend;
-
 
 BOOL CALLBACK DlgProc(HWND, UINT, WPARAM, LPARAM);
 
@@ -31,34 +32,31 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInst, LPTSTR lpszCmdLin
 
 
 DWORD WINAPI GetMessage(LPVOID lp) {
-
-	char buf[MAXSTRLEN];
+	
+	char buffer[MAXSTRLEN];
 	TCHAR buffer2[MAXSTRLEN];
 	while (true)
 	{
-		acceptSocket = accept(_socket, NULL, NULL);
-		int i = recv(acceptSocket, buf, MAXSTRLEN, 0);
-		buf[i] = '\0';
-		swprintf(buffer2, MAXSTRLEN, L"%hs", buf);
-		SetWindowText(hEditReceivedMessage, buffer2);
+		int i = recv(_socket, buffer, MAXSTRLEN, 0);
+		swprintf(buffer2, MAXSTRLEN, L"%hs", buffer);
+		SetWindowText(hEditReceivedMessage,buffer2);
 	}
 	
 
 	return 0;
 }
 
-
 DWORD WINAPI SendMessage(LPVOID lp) {
-
 	TCHAR buffer[MAXSTRLEN];
 	char converted[MAXSTRLEN];
 
 	GetWindowText(hEditSentMessage, buffer, MAXSTRLEN);
-	wcstombs(converted, buffer, MAXSTRLEN);
-	send(acceptSocket, converted, MAXSTRLEN, 0);
+	wcstombs(converted, buffer, wcslen(buffer) + 1);
+	send(_socket, converted, wcslen(buffer), 0);
 
 	return 0;
 }
+
 
 
 BOOL CALLBACK DlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -66,7 +64,7 @@ BOOL CALLBACK DlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	switch (message)
 	{
 	case WM_APP:
-		
+
 		break;
 
 	case WM_CLOSE:
@@ -78,22 +76,14 @@ BOOL CALLBACK DlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_INITDIALOG: {
 		hEditReceivedMessage = GetDlgItem(hWnd, IDC_RECEIVE);
 		hEditSentMessage = GetDlgItem(hWnd, IDC_SENT);
-		hButtonSend = GetDlgItem(hWnd, IDC_SEND);
+		hEditIp = GetDlgItem(hWnd, IDC_IP);
 		hButtonStop = GetDlgItem(hWnd, IDC_STOP);
-		EnableWindow(hEditReceivedMessage, TRUE);
-		EnableWindow(hEditSentMessage, FALSE);
+		hButtonSend = GetDlgItem(hWnd, IDC_SEND);
 		EnableWindow(hButtonSend, FALSE);
 		EnableWindow(hButtonStop, FALSE);
-		if (WSAStartup(MAKEWORD(2, 2), &wsaData) != NO_ERROR) 
-		{
-			system("pause");
-			WSACleanup();
-			exit(10);
-		}
-		_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-		addr.sin_family = AF_INET;
-		inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-		addr.sin_port = htons(20000);
+		SetWindowText(hEditIp, TEXT("127.0.0.1"));
+
+
 
 		return TRUE;
 
@@ -101,28 +91,55 @@ BOOL CALLBACK DlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_COMMAND:
 		switch (LOWORD(wParam))
 		{
-		case IDC_START: {
-			EnableWindow(hEditSentMessage, TRUE);
+		case IDC_CONNECT: {
 			EnableWindow(hButtonSend, TRUE);
 			EnableWindow(hButtonStop, TRUE);
-			bind(_socket, (SOCKADDR*)&addr, sizeof(addr));
-			listen(_socket, 1);
+
+			TCHAR buff[256];
+			char buff2[256];
+			GetWindowText(hEditIp, buff, 256);
+			wcstombs(buff2, buff, MAXSTRLEN);
+
+			if (WSAStartup(MAKEWORD(2, 2), &wsaData) != NO_ERROR) // ðåãèñòðàöèÿ
+			{
+				WSACleanup();
+				exit(10);
+				EndDialog(hWnd, 0);
+			}
+
+			_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+			if (_socket == INVALID_SOCKET)
+			{
+				WSACleanup();
+				exit(11);
+				EndDialog(hWnd, 0);
+			}
+
+
+			addr.sin_family = AF_INET;
+			inet_pton(AF_INET, buff2, &addr.sin_addr);
+			addr.sin_port = htons(20000);
+
+			wcstombs(buff2, buff, 256);
+			connect(_socket, (SOCKADDR*)&addr, sizeof(addr));
+			bind(acceptSocket, (SOCKADDR*)&addr, sizeof(addr));
+			listen(acceptSocket, 1);
 			CreateThread(NULL, 0, GetMessage, hWnd, 0, NULL);
 			break;
 		}
-		case IDC_SEND:
+		case IDC_SEND: {
 			CreateThread(NULL, 0, SendMessage, hWnd, 0, NULL);
-
 			break;
+		}
+
 		case IDC_STOP:
 			WSACleanup();
 			exit(10);
 			EndDialog(hWnd, 0);
 
 			break;
-		
 		}
-
 	}
 	return FALSE;
 }
